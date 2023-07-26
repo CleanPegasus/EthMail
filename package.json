@@ -1,0 +1,11 @@
+{
+  "name": "hardhat-project",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^2.0.2",
+    "hardhat": "^2.17.0"
+  },
+  "dependencies": {
+    "eth-crypto": "^2.6.0",
+    "node-rsa": "^1.1.1"
+  }
+}
