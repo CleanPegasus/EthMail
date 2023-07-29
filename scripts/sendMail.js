@@ -94,7 +94,7 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
 	const encryptedSenderRandomString = await encryptDataTwoWay(sender.publicKey, receiverPublicKeyDecoded, senderRandomString);
 	console.log('Encrypted Sender random string: ', encryptedSenderRandomString.encryptedMessage2String)
 
-	const tx = await ethMail.connect(senderWallet).createHandshake(receiverAddress, encryptedSenderRandomString.encryptedMessage2String);
+	const tx = await ethMail.connect(senderWallet).createHandshake(receiverAddress, ethers.utils.hexlify(ethers.utils.toUtf8Bytes(encryptedSenderRandomString.encryptedMessage2String)));
 	await tx.wait();
 
 	return tx.hash;
@@ -103,7 +103,7 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
 
 async function completeHandshake(receiver, receiverWallet, ethMail) {
 
-	const encryptedSenderRandomString = (await ethMail.getAddedUsers(receiverWallet.address))[0];
+	const encryptedSenderRandomString = ethers.utils.toUtf8String((await ethMail.getAddedUsers(receiverWallet.address))[0]);
 
 	const senderPublicKey = (await ethMail.lookup('sender.ethmail'))[1];
 	const senderPublicKeyDecoded = ethers.utils.defaultAbiCoder.decode(["string"], senderPublicKey)[0];

@@ -10,16 +10,11 @@ contract EthMail {
         string publicKey;
     }
 
-    // struct HandshakeRandomStrings {
-    //     bytes32 encryptedSenderRandomStrings;
-    //     bytes32 encryptedReceiverRandomStrings;
-    // }
-
     mapping (string => Domain) domains;
     mapping (bytes32 => string[]) messages;
     mapping (bytes32 => bytes32) lastMessageHash;
     mapping (address => bytes[]) handshakes;
-    mapping (address => string[]) addUser;
+    mapping (address => bytes[]) addUser;
 
     event DomainRegistered(string domain, address owner, string publicKey);
     event DomainUpdated(string domain, address owner, string publicKey);
@@ -36,7 +31,7 @@ contract EthMail {
         return (domainInfo.owner, domainInfo.publicKey);
     }
 
-    function createHandshake(address receiver, string memory encryptedRandomString) public {
+    function createHandshake(address receiver, bytes memory encryptedRandomString) public {
         // TODO: Checks
         addUser[receiver].push(encryptedRandomString);
         // TODO: Emit an event
@@ -70,7 +65,7 @@ contract EthMail {
         return messages[senderHash];
     }
 
-    function getAddedUsers(address user) public view returns (string[] memory) {
+    function getAddedUsers(address user) public view returns (bytes[] memory) {
         return addUser[user];
     }
 
