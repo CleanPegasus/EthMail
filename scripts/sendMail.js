@@ -155,9 +155,53 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function sendMessage(sender, receiver, message, ethMail) {
+async function sendMessage(sender, senderWallet, receiver, message, ethMail) {
 
+	const encryptedMessage = JSON.stringify(await encryptDataTwoWay(sender.publicKey, receiver.publicKey, message));
+
+	const senderHandshakes = await ethMail.getHandshakes(senderWallet.address);
+	// console.log(senderWallet.address)
+	console.log(senderHandshakes)
+
+	const encryptedSenderRandomString = JSON.parse(ethers.utils.toUtf8String(senderHandshakes[0]));
+	console.log(encryptedSenderRandomString)
+
+	const decryptedSenderKey = JSON.parse(await decryptMessage(encryptedSenderRandomString, sender.privateKey));
+	console.log(decryptedSenderKey.senderRandomString)
+
+	const senderHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(decryptedSenderKey.senderRandomString));
+
+	console.log('Sender hash: ', senderHash)
+
+	const lastMessageHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(encryptedMessage + Date.now().toString()));
+
+	const tx = await ethMail.connect(senderWallet).sendMessage(encryptedMessage, senderHash, lastMessageHash);
+	await tx.wait();
+
+	console.log('Message sent')
 	
+}
+
+async function checkMessages(receiver, ethMail) {
+
+	const receiverHandshakes = await ethMail.getHandshakes(receiver.address);
+
+	const encryptedReceiverRandomString = JSON.parse(ethers.utils.toUtf8String(receiverHandshakes[0]));
+	console.log(encryptedReceiverRandomString)
+
+	const decryptedReceiverKey = JSON.parse(await decryptMessage(encryptedReceiverRandomString, receiver.privateKey));
+	console.log(decryptedReceiverKey.receiverRandomString)
+
+	const receiverHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(decryptedReceiverKey.receiverRandomString));
+
+	console.log('Receiver hash: ', receiverHash)
+
+	const messages = JSON.parse((await ethMail.getMessages(receiverHash))[0]);
+
+	const decryptedMessage = await decryptMessage(messages.encryptedMessage2String, receiver.privateKey);
+	console.log(decryptedMessage)
+
+	return decryptedMessage;
 }
 
 
@@ -190,47 +234,12 @@ async function main() {
 	// Send message from sender to receiver
 	const message = "Hello World";
 
-	const encryptedMessage = JSON.stringify(await encryptDataTwoWay(sender.publicKey, receiver.publicKey, message));
-
-	const senderHandshakes = await ethMail.getHandshakes(senderWallet.address);
-	// console.log(senderWallet.address)
-	console.log(senderHandshakes)
-
-	const encryptedSenderRandomString = JSON.parse(ethers.utils.toUtf8String(senderHandshakes[0]));
-	console.log(encryptedSenderRandomString)
-
-	const decryptedSenderKey = JSON.parse(await decryptMessage(encryptedSenderRandomString, sender.privateKey));
-	console.log(decryptedSenderKey.senderRandomString)
-
-	const senderHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(decryptedSenderKey.senderRandomString));
-
-	console.log('Sender hash: ', senderHash)
-
-	const lastMessageHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(encryptedMessage + Date.now().toString()));
-
-	const tx = await ethMail.connect(senderWallet).sendMessage(encryptedMessage, senderHash, lastMessageHash);
-	await tx.wait();
-
-	console.log('Message sent')
+	await sendMessage(sender, senderWallet, receiver, message, ethMail);
+	
 
 	mineBlocks(100)
 
-	const receiverHandshakes = await ethMail.getHandshakes(receiver.address);
-
-	const encryptedReceiverRandomString = JSON.parse(ethers.utils.toUtf8String(receiverHandshakes[0]));
-	console.log(encryptedReceiverRandomString)
-
-	const decryptedReceiverKey = JSON.parse(await decryptMessage(encryptedReceiverRandomString, receiver.privateKey));
-	console.log(decryptedReceiverKey.receiverRandomString)
-
-	const receiverHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(decryptedReceiverKey.receiverRandomString));
-
-	console.log('Receiver hash: ', receiverHash)
-
-	const messages = JSON.parse((await ethMail.getMessages(receiverHash))[0]);
-
-	const decryptedMessage = await decryptMessage(messages.encryptedMessage2String, receiver.privateKey);
-	console.log(decryptedMessage)
+	const decryptedMessage = await checkMessages(receiver, ethMail);
 
 }
 
