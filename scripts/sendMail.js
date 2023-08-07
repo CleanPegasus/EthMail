@@ -1,7 +1,8 @@
 const { hardhat, ethers } = require("hardhat");
-const NodeRSA = require('node-rsa');
-
 const EthCrypto = require('eth-crypto');
+const snarkjs = require("snarkjs");
+const circomlibjs = require("circomlibjs");
+
 
 // Mine N Blocks
 async function mineBlocks(blocks) {
@@ -10,9 +11,13 @@ async function mineBlocks(blocks) {
     }
 }
 
-async function deployEthMail() {
+async function deployContracts() {
+	const Verifier = await ethers.getContractFactory("Groth16Verifier");
+    const verifier = await Verifier.deploy();
+    await verifier.deployed();
+    console.log("Verifier deployed to:", verifier.address);
 	const EthMail = await ethers.getContractFactory("EthMail");
-	const ethMail = await EthMail.deploy();
+	const ethMail = await EthMail.deploy(verifier.address);
 	await ethMail.deployed();
 	console.log("EthMail deployed to:", ethMail.address);
 	return ethMail;
@@ -77,6 +82,16 @@ async function createIdentity() {
 	return {sender, receiver, senderWallet, receiverWallet};
 }
 
+function createRandomNumber() {
+	// Generate a random 32-byte hexadecimal number
+    const randomBytes = ethers.utils.randomBytes(32);
+    
+    // Convert the random bytes to a BigNumber
+    const randomNumber = ethers.BigNumber.from(randomBytes);
+    
+    return randomNumber.toString();
+}
+
 
 async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
 
@@ -87,7 +102,7 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
 	console.log(`Receiver public key: ${receiverPublicKeyDecoded}`);
 
 	// Create a random string of length 10
-	const senderRandomString = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+	const senderRandomString = createRandomNumber();
 	// console.log(typeof senderRandomString)
 	console.log(`Sender random string: ${senderRandomString}`);
 
@@ -100,6 +115,8 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
 	return tx.hash;
 
 }
+
+
 
 async function completeHandshake(receiver, receiverWallet, ethMail) {
 
@@ -114,7 +131,7 @@ async function completeHandshake(receiver, receiverWallet, ethMail) {
 	console.log(`Decrypted Sender random string: ${decryptedSenderRandomString}`);
 
 	// Create a receiver random string
-	const receiverRandomString = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+	const receiverRandomString = createRandomNumber();
 	console.log(`Receiver random string: ${receiverRandomString}`);
 
 	// Create and encode the handshake between the sender and the receiver
@@ -155,6 +172,25 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function createProof(randomString) {
+
+	const randomStringBigInt = ethers.BigNumber.from(randomString).toBigInt();
+
+	const poseidon = await circomlibjs.buildPoseidon();
+	const hash = poseidon.F.toString(poseidon([randomStringBigInt]));
+
+	const {proof, publicSignals} = await snarkjs.groth16.fullProve(
+		{ in: randomStringBigInt, hash: hash },
+		"build/poseidon_hasher_js/poseidon_hasher.wasm", 
+        "circuit_0000.zkey");
+
+	const calldatas = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
+	const formattedCalldata = JSON.parse('[' + calldatas + ']');
+
+	return formattedCalldata;
+
+}
+
 async function sendMessage(sender, senderWallet, receiver, message, ethMail) {
 
 	const encryptedMessage = JSON.stringify(await encryptDataTwoWay(sender.publicKey, receiver.publicKey, message));
@@ -175,9 +211,10 @@ async function sendMessage(sender, senderWallet, receiver, message, ethMail) {
 
 	const lastMessageHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(encryptedMessage + Date.now().toString()));
 
-	const tx = await ethMail.connect(senderWallet).sendMessage(encryptedMessage, senderHash, lastMessageHash);
-	await tx.wait();
+	const calldatas = await createProof(decryptedSenderKey.senderRandomString);
 
+	const tx = await ethMail.connect(senderWallet).sendMessage(encryptedMessage, senderHash, lastMessageHash, calldatas[0], calldatas[1], calldatas[2], calldatas[3]);
+	await tx.wait();
 	console.log('Message sent')
 	
 }
@@ -208,7 +245,7 @@ async function checkMessages(receiver, ethMail) {
 async function main() {
 
 	// deploy EthMail contract
-	const ethMail = await deployEthMail();
+	const ethMail = await deployContracts();
 
 	// create sender and receiver identities
 	const { sender, receiver, senderWallet, receiverWallet } = await createIdentity();
