@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import 'hardhat/console.sol';
 import './verifier.sol';
 
-contract EthMail is Verifier {
+contract EthMail {
 
     struct Domain {
         address owner;
@@ -52,11 +52,9 @@ contract EthMail is Verifier {
         // TODO: Emit an event
     }
 
-    function sendMessage(string memory encryptedMsg, bytes32 senderHash, bytes32 lastMsgHash, Proof memory proof, uint[3] memory input ) public {
+    function sendMessage(string memory encryptedMsg, bytes32 senderHash, bytes32 lastMsgHash ) public {
 
         // TODO: ZK Proof to check the sender knows the random string X with the zkProof and senderHash
-
-        require(verifyTx(proof, input), "Invalid proof");
 
         messages[senderHash].push(encryptedMsg);
 
