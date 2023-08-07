@@ -116,8 +116,6 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
 
 }
 
-
-
 async function completeHandshake(receiver, receiverWallet, ethMail) {
 
 	const encryptedSenderRandomString = ethers.utils.toUtf8String((await ethMail.getAddedUsers(receiverWallet.address))[0]);
