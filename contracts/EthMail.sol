@@ -60,19 +60,22 @@ contract EthMail {
     }
 
     function sendMessage(string memory encryptedMsg, bytes32 lastMsgHash, 
-                        uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[1] calldata _pubSignals ) external {
+                        uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[3] calldata _pubSignals ) external {
 
-        // TODO: ZK Proof to check the sender knows the random string X with the zkProof and senderHash
+        // ZK Proof to check the sender knows the random string X with the zkProof and senderHash
         bool verification = verifier.verifyProof(_pA, _pB, _pC, _pubSignals);
-        console.log(_pubSignals[0]);
         require(verification, "Invalid proof");
+        require(nonce[msg.sender] == _pubSignals[0], "Invalid nonce");
 
-        bytes32 senderHash = bytes32(_pubSignals[0]);
+        bytes32 senderHash = bytes32(_pubSignals[1]);
 
         messages[senderHash].push(encryptedMsg);
 
         // TODO: Add a mapping that stores the hash last encypted message + timestamp in a mapping for a senderHash
         lastMessageHash[senderHash] = lastMsgHash;
+
+        // Increment the nonce
+        nonce[msg.sender] = nonce[msg.sender] + 1;
         // TODO: Emit an event
     }
 
@@ -86,6 +89,10 @@ contract EthMail {
 
     function getHandshakes(address user) public view returns (bytes[] memory) {
         return handshakes[user];
+    }
+
+    function getNonce(address user) public view returns (uint256) {
+        return nonce[user];
     }
 
 }

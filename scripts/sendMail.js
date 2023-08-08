@@ -170,21 +170,23 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function createProof(randomString) {
+async function createProof(randomString, nonce) {
 
 	const randomStringBigInt = ethers.BigNumber.from(randomString).toBigInt();
 
 	const poseidon = await circomlibjs.buildPoseidon();
 	const hash = poseidon.F.toString(poseidon([randomStringBigInt]));
 	console.log('hash:', hash)
+	const hash_with_nonce = poseidon.F.toString(poseidon([randomStringBigInt, nonce]));
+
 	const {proof, publicSignals} = await snarkjs.groth16.fullProve(
-		{ in: randomStringBigInt, hash: hash },
-		"build/poseidon_hasher_js/poseidon_hasher.wasm", 
+		{ preImage: randomStringBigInt, nonce: nonce, preImageHash: hash, hashedValue: hash_with_nonce },
+		"build/nonce_hasher_js/nonce_hasher.wasm", 
         "circuit_0000.zkey");
-	console.log('publicSignals:', publicSignals)
+	// console.log('publicSignals:', publicSignals)
 	const calldatas = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
 	const formattedCalldata = JSON.parse('[' + calldatas + ']');
-	console.log('formattedCalldata:', formattedCalldata[3])
+	// console.log('formattedCalldata:', formattedCalldata[3])
 
 	return formattedCalldata;
 
@@ -209,8 +211,8 @@ async function sendMessage(sender, senderWallet, receiver, message, ethMail) {
 	console.log('Sender hash: ', senderHash)
 
 	const lastMessageHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(encryptedMessage + Date.now().toString()));
-
-	const calldatas = await createProof(decryptedSenderKey.senderRandomString);
+	const nonce = (await ethMail.getNonce(senderWallet.address)).toBigInt();
+	const calldatas = await createProof(decryptedSenderKey.senderRandomString, nonce);
 
 	const tx = await ethMail.connect(senderWallet).sendMessage(encryptedMessage, lastMessageHash, calldatas[0], calldatas[1], calldatas[2], calldatas[3]);
 	await tx.wait();
