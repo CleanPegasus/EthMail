@@ -176,14 +176,15 @@ async function createProof(randomString) {
 
 	const poseidon = await circomlibjs.buildPoseidon();
 	const hash = poseidon.F.toString(poseidon([randomStringBigInt]));
-
+	console.log('hash:', hash)
 	const {proof, publicSignals} = await snarkjs.groth16.fullProve(
 		{ in: randomStringBigInt, hash: hash },
 		"build/poseidon_hasher_js/poseidon_hasher.wasm", 
         "circuit_0000.zkey");
-
+	console.log('publicSignals:', publicSignals)
 	const calldatas = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
 	const formattedCalldata = JSON.parse('[' + calldatas + ']');
+	console.log('formattedCalldata:', formattedCalldata[3])
 
 	return formattedCalldata;
 
@@ -211,7 +212,7 @@ async function sendMessage(sender, senderWallet, receiver, message, ethMail) {
 
 	const calldatas = await createProof(decryptedSenderKey.senderRandomString);
 
-	const tx = await ethMail.connect(senderWallet).sendMessage(encryptedMessage, senderHash, lastMessageHash, calldatas[0], calldatas[1], calldatas[2], calldatas[3]);
+	const tx = await ethMail.connect(senderWallet).sendMessage(encryptedMessage, lastMessageHash, calldatas[0], calldatas[1], calldatas[2], calldatas[3]);
 	await tx.wait();
 	console.log('Message sent')
 	
@@ -227,14 +228,17 @@ async function checkMessages(receiver, ethMail) {
 	const decryptedReceiverKey = JSON.parse(await decryptMessage(encryptedReceiverRandomString, receiver.privateKey));
 	console.log(decryptedReceiverKey.receiverRandomString)
 
-	const receiverHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(decryptedReceiverKey.receiverRandomString));
+	// const receiverHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(decryptedReceiverKey.receiverRandomString));
+
+	const poseidon = await circomlibjs.buildPoseidon();
+	const receiverHash = poseidon.F.toString(poseidon([BigInt(decryptedReceiverKey.receiverRandomString)]));
 
 	console.log('Receiver hash: ', receiverHash)
 
 	const messages = JSON.parse((await ethMail.getMessages(receiverHash))[0]);
 
 	const decryptedMessage = await decryptMessage(messages.encryptedMessage2String, receiver.privateKey);
-	console.log(decryptedMessage)
+	// console.log(decryptedMessage)
 
 	return decryptedMessage;
 }
@@ -275,8 +279,12 @@ async function main() {
 	mineBlocks(100)
 
 	const decryptedMessage = await checkMessages(receiver, ethMail);
+	console.log(decryptedMessage)
 
 }
 
 
-main();
+main().then(() => process.exit(0)).catch(error => {
+	console.error(error);
+	process.exit(1);
+});

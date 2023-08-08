@@ -59,13 +59,15 @@ contract EthMail {
         // TODO: Emit an event
     }
 
-    function sendMessage(string memory encryptedMsg, bytes32 senderHash, bytes32 lastMsgHash, 
+    function sendMessage(string memory encryptedMsg, bytes32 lastMsgHash, 
                         uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[1] calldata _pubSignals ) external {
 
         // TODO: ZK Proof to check the sender knows the random string X with the zkProof and senderHash
         bool verification = verifier.verifyProof(_pA, _pB, _pC, _pubSignals);
-        console.log(verification);
+        console.log(_pubSignals[0]);
         require(verification, "Invalid proof");
+
+        bytes32 senderHash = bytes32(_pubSignals[0]);
 
         messages[senderHash].push(encryptedMsg);
 
@@ -74,8 +76,8 @@ contract EthMail {
         // TODO: Emit an event
     }
 
-    function getMessages(bytes32 senderHash) public view returns (string[] memory) {
-        return messages[senderHash];
+    function getMessages(uint256 senderHash) public view returns (string[] memory) {
+        return messages[bytes32(senderHash)];
     }
 
     function getAddedUsers(address user) public view returns (bytes[] memory) {
