@@ -10,6 +10,7 @@ contract EthMail {
     struct Domain {
         address owner;
         string publicKey;
+
     }
 
     mapping (string => Domain) domains;
@@ -40,21 +41,17 @@ contract EthMail {
         return (domainInfo.owner, domainInfo.publicKey);
     }
 
-    function createHandshake(address receiver, bytes memory encryptedRandomString) public {
-        // TODO: Checks
-        addUser[receiver].push(encryptedRandomString);
+    function createHandshake(address receiver, bytes memory senderEncryptedRandomStrings, 
+                            bytes memory receiverEncryptedRandomStrings) public {
+        
+        handshakes[msg.sender].push(senderEncryptedRandomStrings);
+        addUser[receiver].push(receiverEncryptedRandomStrings);
         // TODO: Emit an event
     }
 
-    function completeHandshake(address sender, 
-                            bytes memory receiverEncryptedRandomStrings, 
-                            bytes memory senderEncryptedRandomStrings) external {
-        // TODO: ZK Proof to check the sender knows the random string X with the zkProof and senderHash
+    function completeHandshake(bytes memory receiverEncryptedRandomStrings) external {
 
-        // console.log(sender);
-        handshakes[sender].push(senderEncryptedRandomStrings);
         handshakes[msg.sender].push(receiverEncryptedRandomStrings);
-
 
         // TODO: Emit an event
     }

@@ -103,39 +103,13 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
 
 	// Create a random string of length 10
 	const senderRandomString = createRandomNumber();
-	// console.log(typeof senderRandomString)
+	const receiverRandomString = createRandomNumber();
+
 	console.log(`Sender random string: ${senderRandomString}`);
 
-	const encryptedSenderRandomString = await encryptDataTwoWay(sender.publicKey, receiverPublicKeyDecoded, senderRandomString);
-	console.log('Encrypted Sender random string: ', encryptedSenderRandomString.encryptedMessage2String)
-
-	const tx = await ethMail.connect(senderWallet).createHandshake(receiverAddress, ethers.utils.hexlify(ethers.utils.toUtf8Bytes(encryptedSenderRandomString.encryptedMessage2String)));
-	await tx.wait();
-
-	return tx.hash;
-
-}
-
-async function completeHandshake(receiver, receiverWallet, ethMail) {
-
-	const encryptedSenderRandomString = ethers.utils.toUtf8String((await ethMail.getAddedUsers(receiverWallet.address))[0]);
-
-	const senderPublicKey = (await ethMail.lookup('sender.ethmail'))[1];
-	const senderPublicKeyDecoded = ethers.utils.defaultAbiCoder.decode(["string"], senderPublicKey)[0];
-
-	const senderAddress = (await ethMail.lookup('sender.ethmail'))[0];
-
-	const decryptedSenderRandomString = await decryptMessage(encryptedSenderRandomString, receiver.privateKey);
-	console.log(`Decrypted Sender random string: ${decryptedSenderRandomString}`);
-
-	// Create a receiver random string
-	const receiverRandomString = createRandomNumber();
-	console.log(`Receiver random string: ${receiverRandomString}`);
-
-	// Create and encode the handshake between the sender and the receiver
 	const senderHandshakeRandomStrings = {
 		receiver: 'receiver.ethmail',
-		senderRandomString: decryptedSenderRandomString,
+		senderRandomString: senderRandomString,
 		receiverRandomString: receiverRandomString
 	}
 
@@ -144,31 +118,42 @@ async function completeHandshake(receiver, receiverWallet, ethMail) {
 	const receiverHandshakeRandomStrings = {
 		receiver: 'sender.ethmail',
 		senderRandomString: receiverRandomString,
-		receiverRandomString: decryptedSenderRandomString
+		receiverRandomString: senderRandomString
 	}
 
 	const encodedReceiverHandshakeRandomStrings = JSON.stringify(receiverHandshakeRandomStrings)
 	// Encrypt the handshake with the public keys of the sender and the receiver
-	const encryptedSenderRandomStrings = await encryptData(senderPublicKeyDecoded, encodedSenderHandshakeRandomStrings);
-	const encryptedReceiverRandomStrings = await encryptData(receiver.publicKey, encodedReceiverHandshakeRandomStrings);
+	const encryptedSenderRandomStrings = await encryptData(sender.publicKey, encodedSenderHandshakeRandomStrings);
+	const encryptedReceiverRandomStrings = await encryptData(receiverPublicKeyDecoded, encodedReceiverHandshakeRandomStrings);
 
-	console.log(encryptedSenderRandomStrings)
-
+	// Convert the encrypted messages to hex strings
 	let encryptedSenderRandomHexs = ethers.utils.hexlify(ethers.utils.toUtf8Bytes(JSON.stringify(encryptedSenderRandomStrings)));
 	let encryptedReceiverRandomHexes = ethers.utils.hexlify(ethers.utils.toUtf8Bytes(JSON.stringify(encryptedReceiverRandomStrings)));
 
-	console.log(encryptedReceiverRandomHexes)
+
+	const tx = await ethMail.connect(senderWallet).createHandshake(receiverAddress, encryptedSenderRandomHexs, encryptedReceiverRandomHexes);
+	await tx.wait();
+
+	return tx.hash;
+
+}
+
+async function completeHandshake(receiver, receiverWallet, ethMail) {
+
+	const receiverEncryptedRandomStrings = (await ethMail.getAddedUsers(receiverWallet.address))[0];
+
+	const receiverEncryptedRandomStringsDecoded = JSON.parse(ethers.utils.toUtf8String(receiverEncryptedRandomStrings));
+	console.log('receiverEncryptedRandomStringsDecoded:', receiverEncryptedRandomStringsDecoded)
+	const decryptedReceiverKey = await decryptMessage(receiverEncryptedRandomStringsDecoded, receiver.privateKey);
+	console.log('decryptedReceiverKey:', JSON.parse(decryptedReceiverKey))
 
 	// Complete the handshake
-	const tx = await ethMail.connect(receiverWallet).completeHandshake(senderAddress, encryptedReceiverRandomHexes, encryptedSenderRandomHexs);
+	const tx = await ethMail.connect(receiverWallet).completeHandshake(receiverEncryptedRandomStrings);
 	await tx.wait();
 
 	// return { senderRandomString, receiverRandomString };
 }
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 async function createProof(randomString, nonce) {
 
@@ -276,7 +261,6 @@ async function main() {
 	const message = "Hello World";
 
 	await sendMessage(sender, senderWallet, receiver, message, ethMail);
-	
 
 	mineBlocks(100)
 
