@@ -26,13 +26,6 @@ async function deployContracts() {
   return ethMail;
 }
 
-async function computeSharedKey(sender, receiverPublicKey) {
-  const dhke = crypto.createECDH("secp256k1");
-  dhke.setPrivateKey(sender.privateKey, "hex");
-  const sharedKey = dhke.computeSecret(receiverPublicKey, "hex");
-  return sharedKey;
-}
-
 function computeSharedKey(sender, receiverPublicKey) {
   const dhke = crypto.createECDH("secp256k1");
   dhke.setPrivateKey(sender.privateKey, "hex");
@@ -40,11 +33,8 @@ function computeSharedKey(sender, receiverPublicKey) {
   return sharedKey;
 }
 
-function aesEncrypt(message, sender, receiverPublicKey) {
-  const sharedKey = computeSharedKey(sender, receiverPublicKey);
-
+function aesEncrypt(message, sharedKey) {
   const iv = crypto.randomBytes(16); // Random initialization vector
-  console.log("iv", iv);
   const cipher = crypto.createCipheriv(
     "aes-256-cbc",
     sharedKey.slice(0, 32),
@@ -56,8 +46,7 @@ function aesEncrypt(message, sender, receiverPublicKey) {
   return { iv, encrypted };
 }
 
-function aesDecrypt(encryptedMessage, receiver, SenderPublicKey) {
-  const sharedKey = computeSharedKey(receiver, SenderPublicKey);
+function aesDecrypt(encryptedMessage, sharedKey) {
   // Decrypt the message with the shared secret
   const decipher = crypto.createDecipheriv(
     "aes-256-cbc",
@@ -274,9 +263,9 @@ async function sendMessage(
     ["string"],
     receiverPublicKey
   )[0];
-
+	const sharedKey = computeSharedKey(sender, receiverPublicKeyDecoded);
   const encryptedMessage = JSON.stringify(
-    aesEncrypt(message, sender, receiverPublicKeyDecoded)
+    aesEncrypt(message, sharedKey)
   );
 
   const senderHandshakes = await ethMail.getHandshakes(senderWallet.address);
@@ -353,10 +342,11 @@ async function checkMessages(receiver, ethMail) {
     ["string"],
     senderPublicKey
   )[0];
+
+	const sharedKey = computeSharedKey(receiver, senderPublicKeyDecoded);
   const decryptedMessage = aesDecrypt(
     messages,
-    receiver,
-    senderPublicKeyDecoded
+    sharedKey
   );
   // console.log(decryptedMessage)
 
@@ -423,17 +413,3 @@ main()
     console.error(error);
     process.exit(1);
   });
-
-// async function test() {
-
-// 	// create sender and receiver identities
-// 	const { sender, receiver, senderWallet, receiverWallet } = await createIdentity();
-
-// 	console.log(sender.privateKey)
-// 	console.log(receiver.publicKey)
-
-// 	dhkeEncrypt(sender, receiver);
-
-// }
-
-// test()
