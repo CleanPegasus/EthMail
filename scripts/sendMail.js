@@ -2,7 +2,7 @@ const { hardhat, ethers } = require("hardhat");
 const EthCrypto = require("eth-crypto");
 const snarkjs = require("snarkjs");
 const circomlibjs = require("circomlibjs");
-const secp256k1 = require("secp256k1");
+
 const crypto = require("crypto");
 
 // const eccrypto = require("eccrypto");
@@ -250,13 +250,35 @@ async function createProof(randomString, nonce) {
   return formattedCalldata;
 }
 
-async function sendMessage(
-  sender,
-  senderWallet,
-  receiverEthMail,
-  message,
-  ethMail
-) {
+async function createMessage(senderWallet, message) {
+	const detailedMessage = {
+		sender: senderWallet.address,
+		message: message,
+		timestamp: Date.now()
+	}
+	const signature = await senderWallet.signMessage(JSON.stringify(detailedMessage));
+	const signedMessage = {
+		message: detailedMessage,
+		signature: signature
+	}
+
+	return JSON.stringify(signedMessage);
+}
+
+async function verifyMessage(signedMessage, senderAddress) {
+	const { message, signature } = JSON.parse(signedMessage);
+
+	console.log("message:", message);
+	console.log("sign:", signature);
+
+	const recoveredAddress = ethers.utils.verifyMessage(JSON.stringify(message), signature);
+
+	return recoveredAddress === senderAddress;
+}
+
+async function sendMessage(sender, senderWallet, receiverEthMail, message, ethMail) {
+
+	const signedMessage = await createMessage(senderWallet, message);
   const receiverPublicKey = (await ethMail.lookup(receiverEthMail))[1];
   console.log("receiverPublicKey:", receiverPublicKey);
   const receiverPublicKeyDecoded = ethers.utils.defaultAbiCoder.decode(
@@ -265,7 +287,7 @@ async function sendMessage(
   )[0];
 	const sharedKey = computeSharedKey(sender, receiverPublicKeyDecoded);
   const encryptedMessage = JSON.stringify(
-    aesEncrypt(message, sharedKey)
+    aesEncrypt(signedMessage, sharedKey)
   );
 
   const senderHandshakes = await ethMail.getHandshakes(senderWallet.address);
@@ -404,7 +426,11 @@ async function main() {
   mineBlocks(100);
 
   const decryptedMessage = await checkMessages(receiver, ethMail);
-  console.log(decryptedMessage);
+	// verify the message
+	console.log(JSON.parse(decryptedMessage).message.message);
+	const verified = await verifyMessage(decryptedMessage, senderWallet.address);
+	console.log("Message verified: ", verified)
+  
 }
 
 main()
