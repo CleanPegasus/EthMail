@@ -99,10 +99,7 @@ async function createIdentity() {
   const receiver = createECDHIdentity();
 
   const senderWallet = new ethers.Wallet(sender.privateKey, ethers.provider);
-  const receiverWallet = new ethers.Wallet(
-    receiver.privateKey,
-    ethers.provider
-  );
+  const receiverWallet = new ethers.Wallet(receiver.privateKey, ethers.provider);
 
   // send ETH to sender and receiver
   const [deployer] = await ethers.getSigners();
@@ -128,7 +125,7 @@ function createRandomNumber() {
   return randomNumber.toString();
 }
 
-async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
+async function createHandshake(sender, senderEthMail, senderWallet, receiverEthMail, ethMail) {
   const receiverPublicKey = (await ethMail.lookup(receiverEthMail))[1];
   const receiverAddress = (await ethMail.lookup(receiverEthMail))[0];
 
@@ -145,7 +142,7 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
   console.log(`Sender random string: ${senderRandomString}`);
 
   const senderHandshakeRandomStrings = {
-    receiver: "receiver.ethmail",
+    receiver: "receiver.ethMail",
     senderRandomString: senderRandomString,
     receiverRandomString: receiverRandomString,
   };
@@ -155,7 +152,7 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
   );
 
   const receiverHandshakeRandomStrings = {
-    receiver: "sender.ethmail",
+    receiver: "sender.ethMail",
     senderRandomString: receiverRandomString,
     receiverRandomString: senderRandomString,
   };
@@ -184,6 +181,7 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
   const tx = await ethMail
     .connect(senderWallet)
     .createHandshake(
+			senderEthMail,
       receiverAddress,
       encryptedSenderRandomHexs,
       encryptedReceiverRandomHexes
@@ -193,7 +191,7 @@ async function createHandshake(sender, senderWallet, receiverEthMail, ethMail) {
   return tx.hash;
 }
 
-async function completeHandshake(receiver, receiverWallet, ethMail) {
+async function completeHandshake(receiver, receiverEthMail, receiverWallet, ethMail) {
   const receiverEncryptedRandomStrings = (
     await ethMail.getAddedUsers(receiverWallet.address)
   )[0];
@@ -211,10 +209,13 @@ async function completeHandshake(receiver, receiverWallet, ethMail) {
   );
   console.log("decryptedReceiverKey:", JSON.parse(decryptedReceiverKey));
 
+	const senderAddress = (await ethMail.lookup(JSON.parse(decryptedReceiverKey).receiver))[0];
+	console.log("senderAddress:", senderAddress);
+
   // Complete the handshake
   const tx = await ethMail
     .connect(receiverWallet)
-    .completeHandshake(receiverEncryptedRandomStrings);
+    .completeHandshake(receiverEthMail, senderAddress, receiverEncryptedRandomStrings);
   await tx.wait();
 
   // return { senderRandomString, receiverRandomString };
@@ -280,6 +281,7 @@ async function sendMessage(sender, senderWallet, receiverEthMail, message, ethMa
 
 	const signedMessage = await createMessage(senderWallet, message);
   const receiverPublicKey = (await ethMail.lookup(receiverEthMail))[1];
+	const receiverAddress = (await ethMail.lookup(receiverEthMail))[0];
   console.log("receiverPublicKey:", receiverPublicKey);
   const receiverPublicKeyDecoded = ethers.utils.defaultAbiCoder.decode(
     ["string"],
@@ -290,12 +292,12 @@ async function sendMessage(sender, senderWallet, receiverEthMail, message, ethMa
     aesEncrypt(signedMessage, sharedKey)
   );
 
-  const senderHandshakes = await ethMail.getHandshakes(senderWallet.address);
+  const senderHandshakes = await ethMail.getHandshakes(senderWallet.address, receiverAddress);
   // console.log(senderWallet.address)
   console.log(senderHandshakes);
 
   const encryptedSenderRandomString = JSON.parse(
-    ethers.utils.toUtf8String(senderHandshakes[0])
+    ethers.utils.toUtf8String(senderHandshakes)
   );
   console.log(encryptedSenderRandomString);
 
@@ -333,11 +335,15 @@ async function sendMessage(sender, senderWallet, receiverEthMail, message, ethMa
   console.log("Message sent");
 }
 
-async function checkMessages(receiver, ethMail) {
-  const receiverHandshakes = await ethMail.getHandshakes(receiver.address);
+async function checkMessages(receiver, senderEthMail, ethMail) {
 
+	const senderAddress = (await ethMail.lookup(senderEthMail))[0];
+	console.log(ethMail.address);
+  const receiverHandshake = await ethMail.getHandshakes(receiver.address, senderAddress);
+
+	console.log("receiverHandshake:", receiverHandshake)
   const encryptedReceiverRandomString = JSON.parse(
-    ethers.utils.toUtf8String(receiverHandshakes[0])
+    ethers.utils.toUtf8String(receiverHandshake)
   );
   console.log(encryptedReceiverRandomString);
 
@@ -380,40 +386,31 @@ async function main() {
   const ethMail = await deployContracts();
 
   // create sender and receiver identities
-  const { sender, receiver, senderWallet, receiverWallet } =
-    await createIdentity();
-  const senderEthMail = "sender.ethmail";
-  const receiverEthMail = "receiver.ethmail";
+  const { sender, receiver, senderWallet, receiverWallet } = await createIdentity();
+
+  const senderEthMail = "sender.ethMail";
+  const receiverEthMail = "receiver.ethMail";
 
   // register sender and receiver domains
   const encodedSenderPublicKey = ethers.utils.defaultAbiCoder.encode(
     ["string"],
     [sender.publicKey]
   );
-  await ethMail
-    .connect(senderWallet)
-    .registerDomain(senderEthMail, encodedSenderPublicKey);
+  await ethMail.connect(senderWallet).registerDomain(senderEthMail, encodedSenderPublicKey);
 
   const encodedReceiverPublicKey = ethers.utils.defaultAbiCoder.encode(
     ["string"],
     [receiver.publicKey]
   );
-  await ethMail
-    .connect(receiverWallet)
-    .registerDomain(receiverEthMail, encodedReceiverPublicKey);
+  await ethMail.connect(receiverWallet).registerDomain(receiverEthMail, encodedReceiverPublicKey);
 
   // create handshake
-  const { senderRandomString, receiverRandomString } = await createHandshake(
-    sender,
-    senderWallet,
-    receiverEthMail,
-    ethMail
-  );
+  await createHandshake(sender, senderEthMail, senderWallet, receiverEthMail, ethMail);
 
   console.log("Handshake created");
 
   // Complete handshake
-  await completeHandshake(receiver, receiverWallet, ethMail);
+  await completeHandshake(receiver, receiverEthMail, receiverWallet, ethMail);
   console.log("Handshake completed");
 
   mineBlocks(100);
@@ -425,7 +422,7 @@ async function main() {
 
   mineBlocks(100);
 
-  const decryptedMessage = await checkMessages(receiver, ethMail);
+  const decryptedMessage = await checkMessages(receiver, senderEthMail, ethMail);
 	// verify the message
 	console.log(JSON.parse(decryptedMessage).message.message);
 	const verified = await verifyMessage(decryptedMessage, senderWallet.address);

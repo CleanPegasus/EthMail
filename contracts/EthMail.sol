@@ -10,18 +10,22 @@ contract EthMail {
     struct Domain {
         address owner;
         string publicKey;
-
+        mapping (address => bytes) handshakes;
     }
 
     mapping (string => Domain) domains;
+    mapping (address => string) domainsByOwner;
     mapping (bytes32 => string[]) messages;
     mapping (bytes32 => bytes32) lastMessageHash;
-    mapping (address => bytes[]) handshakes;
     mapping (address => bytes[]) addUser;
     mapping (address => uint256) nonce;
 
     event DomainRegistered(string domain, address owner, string publicKey);
     event DomainUpdated(string domain, address owner, string publicKey);
+
+    event HandshakeCreated(address indexed sender, address indexed receiver);
+
+    event HandshakeCompleted(address indexed sender, address indexed receiver);
 
     IVerifier verifier;
 
@@ -29,31 +33,41 @@ contract EthMail {
         verifier = IVerifier(_verifier);
     }
 
-    function registerDomain(string memory domain, string memory publickey) public {
+    function registerDomain(string memory domain, string memory publickey) isEthMail(domain) public {
         require(domains[domain].owner == address(0), "Domain already registered");
-
-        domains[domain] = Domain(msg.sender, publickey);
+        require(ifEthMail(domain), "Domain name must end with .ethMail");
+        domains[domain].owner = msg.sender;
+        domains[domain].publicKey = publickey;
+        domainsByOwner[msg.sender] = domain;
         emit DomainRegistered(domain, msg.sender, publickey);
     }
 
     function lookup(string memory domain) public view returns (address owner, string memory publicKey) {
-        Domain memory domainInfo = domains[domain];
-        return (domainInfo.owner, domainInfo.publicKey);
+        return (domains[domain].owner, domains[domain].publicKey);
     }
 
-    function createHandshake(address receiver, bytes memory senderEncryptedRandomStrings, 
+    function createHandshake(string memory domainName, address receiver, bytes memory senderEncryptedRandomStrings, 
                             bytes memory receiverEncryptedRandomStrings) public {
-        
-        handshakes[msg.sender].push(senderEncryptedRandomStrings);
+
+        address owner = domains[domainName].owner;
+        require(owner == msg.sender, "Only the domain owner can create a handshake");
+
+        domains[domainName].handshakes[receiver] = senderEncryptedRandomStrings;
         addUser[receiver].push(receiverEncryptedRandomStrings);
+        
         // TODO: Emit an event
+        emit HandshakeCreated(msg.sender, receiver);
     }
 
-    function completeHandshake(bytes memory receiverEncryptedRandomStrings) external {
+    function completeHandshake(string memory domainName, address sender, bytes memory receiverEncryptedRandomStrings) external {
 
-        handshakes[msg.sender].push(receiverEncryptedRandomStrings);
+        address owner = domains[domainName].owner;
+        require(owner == msg.sender, "Only the domain owner can complete a handshake");
+        domains[domainName].handshakes[sender] = receiverEncryptedRandomStrings;
 
         // TODO: Emit an event
+        emit HandshakeCompleted(sender, msg.sender);
+
     }
 
     function sendMessage(string memory encryptedMsg, bytes32 lastMsgHash, 
@@ -84,12 +98,34 @@ contract EthMail {
         return addUser[user];
     }
 
-    function getHandshakes(address user) public view returns (bytes[] memory) {
-        return handshakes[user];
+    function getHandshakes(address user, address reciever) public view returns (bytes memory) {
+        return domains[domainsByOwner[user]].handshakes[reciever];
     }
 
     function getNonce(address user) public view returns (uint256) {
         return nonce[user];
+    }
+
+    modifier isEthMail(string memory domain) {
+        require(ifEthMail(domain), "Domain name must end with .ethMail");
+        _;
+    }
+
+    function ifEthMail(string memory input) public pure returns (bool) {
+        bytes memory inputBytes = bytes(input);
+        bytes memory ethMailBytes = bytes(".ethMail");
+        
+        if(inputBytes.length < 8) {
+            return false;
+        }
+        
+        for(uint i = 0; i < 8; i++) {
+            if(inputBytes[inputBytes.length - 8 + i] != ethMailBytes[i]) {
+                return false;
+            }
+        }
+        
+        return true;
     }
 
 }
