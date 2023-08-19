@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import 'hardhat/console.sol';
 // import './verifier.sol';
 import './IVerifier.sol';
 
@@ -13,8 +12,8 @@ contract EthMail {
         mapping (address => bytes) handshakes;
     }
 
-    mapping (string => Domain) domains;
-    mapping (address => string) domainsByOwner;
+    mapping (bytes => Domain) domains;
+    mapping (address => bytes) domainsByOwner;
     mapping (bytes32 => string[]) messages;
     mapping (bytes32 => bytes32) lastMessageHash;
     mapping (address => bytes[]) addUser;
@@ -33,26 +32,28 @@ contract EthMail {
         verifier = IVerifier(_verifier);
     }
 
-    function registerDomain(string memory domain, string memory publickey) isEthMail(domain) public {
-        require(domains[domain].owner == address(0), "Domain already registered");
-        require(ifEthMail(domain), "Domain name must end with .ethMail");
-        domains[domain].owner = msg.sender;
-        domains[domain].publicKey = publickey;
-        domainsByOwner[msg.sender] = domain;
+    function registerDomain(string memory domain, string memory publickey) isEthMail(domain) external {
+        bytes memory domainBytes = bytes(domain);
+        require(domains[domainBytes].owner == address(0), "Domain already registered");
+        domains[domainBytes].owner = msg.sender;
+        domains[domainBytes].publicKey = publickey;
+        domainsByOwner[msg.sender] = bytes(domain);
         emit DomainRegistered(domain, msg.sender, publickey);
     }
 
-    function lookup(string memory domain) public view returns (address owner, string memory publicKey) {
-        return (domains[domain].owner, domains[domain].publicKey);
+    function lookup(string memory domain) external view returns (address owner, string memory publicKey) {
+        bytes memory domainBytes = bytes(domain);
+        return (domains[domainBytes].owner, domains[domainBytes].publicKey);
     }
 
     function createHandshake(string memory domainName, address receiver, bytes memory senderEncryptedRandomStrings, 
-                            bytes memory receiverEncryptedRandomStrings) public {
-
-        address owner = domains[domainName].owner;
+                            bytes memory receiverEncryptedRandomStrings) external {
+        
+        bytes memory domainBytes = bytes(domainName);
+        address owner = domains[domainBytes].owner;
         require(owner == msg.sender, "Only the domain owner can create a handshake");
 
-        domains[domainName].handshakes[receiver] = senderEncryptedRandomStrings;
+        domains[domainBytes].handshakes[receiver] = senderEncryptedRandomStrings;
         addUser[receiver].push(receiverEncryptedRandomStrings);
         
         // TODO: Emit an event
@@ -61,9 +62,10 @@ contract EthMail {
 
     function completeHandshake(string memory domainName, address sender, bytes memory receiverEncryptedRandomStrings) external {
 
-        address owner = domains[domainName].owner;
+        bytes memory domainBytes = bytes(domainName);
+        address owner = domains[domainBytes].owner;
         require(owner == msg.sender, "Only the domain owner can complete a handshake");
-        domains[domainName].handshakes[sender] = receiverEncryptedRandomStrings;
+        domains[domainBytes].handshakes[sender] = receiverEncryptedRandomStrings;
 
         // TODO: Emit an event
         emit HandshakeCompleted(sender, msg.sender);
@@ -99,6 +101,7 @@ contract EthMail {
     }
 
     function getHandshakes(address user, address reciever) public view returns (bytes memory) {
+
         return domains[domainsByOwner[user]].handshakes[reciever];
     }
 
