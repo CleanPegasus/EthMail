@@ -12,10 +12,15 @@ contract EthMail {
         mapping (address => bytes) handshakes;
     }
 
+    struct lastMessage {
+        bytes32 hash;
+        uint256 timestamp;
+    }
+
     mapping (bytes => Domain) domains;
     mapping (address => bytes) domainsByOwner;
     mapping (bytes32 => string[]) messages;
-    mapping (bytes32 => bytes32) lastMessageHash;
+    mapping (bytes32 => lastMessage) lastMessageHash;
     mapping (address => bytes[]) addUser;
     mapping (address => uint256) nonce;
 
@@ -56,7 +61,7 @@ contract EthMail {
         domains[domainBytes].handshakes[receiver] = senderEncryptedRandomStrings;
         addUser[receiver].push(receiverEncryptedRandomStrings);
         
-        // TODO: Emit an event
+        // Emit an event
         emit HandshakeCreated(msg.sender, receiver);
     }
 
@@ -67,7 +72,7 @@ contract EthMail {
         require(owner == msg.sender, "Only the domain owner can complete a handshake");
         domains[domainBytes].handshakes[sender] = receiverEncryptedRandomStrings;
 
-        // TODO: Emit an event
+        // Emit an event
         emit HandshakeCompleted(sender, msg.sender);
 
     }
@@ -81,12 +86,10 @@ contract EthMail {
         require(nonce[msg.sender] == _pubSignals[0], "Invalid nonce");
 
         bytes32 senderHash = bytes32(_pubSignals[1]);
-
+        // Push the message to the mapping for a senderHash
         messages[senderHash].push(encryptedMsg);
-
-        // TODO: Add a mapping that stores the hash last encypted message + timestamp in a mapping for a senderHash
-        lastMessageHash[senderHash] = lastMsgHash;
-
+        // Add a mapping that stores the hash last encypted message + timestamp in a mapping for a senderHash
+        lastMessageHash[senderHash] = lastMessage(lastMsgHash, block.timestamp);
         // Increment the nonce
         nonce[msg.sender] = nonce[msg.sender] + 1;
         // TODO: Emit an event
@@ -107,6 +110,10 @@ contract EthMail {
 
     function getNonce(address user) public view returns (uint256) {
         return nonce[user];
+    }
+
+    function getDomainByOwner(address user) public view returns (string memory) {
+        return string(domainsByOwner[user]);
     }
 
     modifier isEthMail(string memory domain) {

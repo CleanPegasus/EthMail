@@ -77,7 +77,7 @@ async function main() {
   console.log("Handshake created");
 
   // Complete handshake
-  await utils.completeHandshake(receiver, receiverEthMail, receiverWallet, ethMail);
+  await utils.completeHandshake(receiver, receiverEthMail, receiverWallet, ethMail, 0);
   console.log("Handshake completed");
 
   utils.mineBlocks(10);
@@ -103,7 +103,8 @@ async function main() {
 
   await utils.checkAllMessagesForSender(receiver, senderEthMail, ethMail);
 
-  await utils.getAllUserHandshakes(receiver, ethMail);
+  const allEthMails = await utils.getAllUserHandshakes(receiver, ethMail);
+  console.log(allEthMails);
   
 }
 

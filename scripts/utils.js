@@ -77,7 +77,6 @@ async function decryptMessage(encryptedMessage, privateKey) {
   return decryptedMessage;
 }
 
-
 function createRandomNumber() {
   // Generate a random 32-byte hexadecimal number
   const randomBytes = ethers.utils.randomBytes(32);
@@ -154,10 +153,10 @@ async function createHandshake(sender, senderEthMail, senderWallet, receiverEthM
   return tx.hash;
 }
 
-async function completeHandshake(receiver, receiverEthMail, receiverWallet, ethMail) {
+async function completeHandshake(receiver, receiverEthMail, receiverWallet, ethMail, index) {
   const receiverEncryptedRandomStrings = (
     await ethMail.getAddedUsers(receiverWallet.address)
-  )[0];
+  )[index];
 
   const receiverEncryptedRandomStringsDecoded = JSON.parse(
     ethers.utils.toUtf8String(receiverEncryptedRandomStrings)
@@ -180,7 +179,8 @@ async function completeHandshake(receiver, receiverEthMail, receiverWallet, ethM
     .connect(receiverWallet)
     .completeHandshake(receiverEthMail, senderAddress, receiverEncryptedRandomStrings);
   await tx.wait();
-
+	
+	return tx.hash;
   // return { senderRandomString, receiverRandomString };
 }
 
@@ -361,7 +361,6 @@ function decryptAllMessages(sharedKey, messages) {
 	return decryptedMessages;
 }
 
-
 async function getAllUserHandshakes(receiver, ethMail) {
 	const [filter1, filter2] = [
 		ethMail.filters.HandshakeCompleted(receiver.address, null),
@@ -379,7 +378,14 @@ async function getAllUserHandshakes(receiver, ethMail) {
 		return event.args[0];
 	});
 	const allAddresses = [...senderAddresses, ...receiverAddresses];
-	console.log(allAddresses);
+
+	const allEthMail = await Promise.all(
+		allAddresses.map(async (address) => {
+			const domain = await ethMail.getDomainByOwner(address);
+			return domain;
+		}));
+
+	return allEthMail;
 }
 
 async function checkAllMessagesForSender(receiver, senderEthMail, ethMail) {
@@ -429,10 +435,49 @@ async function checkAllMessagesForSender(receiver, senderEthMail, ethMail) {
 	return [decryptedSentMessages, decryptedReceivedMessages];
 
 }
+function createECDHIdentity() {
+  const alice = crypto.createECDH("secp256k1");
+  alice.generateKeys();
+
+  // Get public and private keys in hex format
+  const publicKey = alice.getPublicKey("hex");
+  const privateKey = alice.getPrivateKey("hex");
+
+  const address = EthCrypto.publicKey.toAddress(publicKey);
+
+  return {
+    address: address,
+    privateKey: privateKey,
+    publicKey: publicKey,
+  };
+}
+
+async function createIdentity() {
+  
+  const sender = createECDHIdentity();
+  const receiver = createECDHIdentity();
+
+  const senderWallet = new ethers.Wallet(sender.privateKey, ethers.provider);
+  const receiverWallet = new ethers.Wallet(receiver.privateKey, ethers.provider);
+
+  // send ETH to sender and receiver
+  const [deployer] = await ethers.getSigners();
+  await deployer.sendTransaction({
+    to: sender.address,
+    value: ethers.utils.parseEther("100"),
+  });
+  await deployer.sendTransaction({
+    to: receiver.address,
+    value: ethers.utils.parseEther("100"),
+  });
+
+  return { sender, receiver, senderWallet, receiverWallet };
+}
+
 
 module.exports = {
     deployContracts,
-    // createIdentity,
+    createIdentity,
     registerDomain,
     createHandshake,
     completeHandshake,
@@ -441,6 +486,5 @@ module.exports = {
     verifyMessage,
     mineBlocks,
 		checkAllMessagesForSender,
-		getAllUserHandshakes
-
+		getAllUserHandshakes,
 }
