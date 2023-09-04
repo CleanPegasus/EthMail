@@ -445,10 +445,13 @@ function createECDHIdentity() {
 
   const address = EthCrypto.publicKey.toAddress(publicKey);
 
+  const signer = new ethers.Wallet(privateKey, ethers.provider);
+
   return {
     address: address,
     privateKey: privateKey,
     publicKey: publicKey,
+    signer: signer,
   };
 }
 
